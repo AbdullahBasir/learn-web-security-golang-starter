@@ -300,11 +300,18 @@ func (store *Store) DeleteChallenge(ctx context.Context, token string) error {
 }
 
 func (store *Store) ConsumeBackupCode(ctx context.Context, userID int64, code string) (bool, error) {
-	var count int
-	if err := store.database.QueryRowContext(ctx, "SELECT COUNT(*) FROM totp_backup_codes WHERE user_id = ? AND code_hash = ?", userID, hashToken(code)).Scan(&count); err != nil {
-		return false, fmt.Errorf("find TOTP backup code: %w", err)
+	consumed, err := store.queries.ConsumeTOTPBackupCode(ctx, dbgen.ConsumeTOTPBackupCodeParams{
+		UserID:   userID,
+		CodeHash: hashToken(code),
+	})
+	if err != nil {
+		return false, fmt.Errorf("consume TOTP backup code: %w", err)
 	}
-	return count == 1, nil
+	affected, err := consumed.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("backup check returned a fail for check: %w", err)
+	}
+	return affected == 1, nil
 }
 
 func (store *Store) CountRecentRecoveryFailures(ctx context.Context, email string) (int64, error) {
