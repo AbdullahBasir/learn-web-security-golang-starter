@@ -3,7 +3,6 @@ package checkout
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -96,7 +95,7 @@ func (handler *Handler) Submit(responseWriter http.ResponseWriter, request *http
 		handler.renderCheckoutError(responseWriter, request, http.StatusConflict, current, items, unavailableItem.Name+" is no longer available in the requested quantity. Update your cart before checking out.")
 		return
 	}
-	shippingDetails, discountCents, valid := handler.parseCheckoutForm(responseWriter, request)
+	shippingDetails, _, valid := handler.parseCheckoutForm(responseWriter, request)
 	if !valid {
 		return
 	}
@@ -128,7 +127,7 @@ func (handler *Handler) Submit(responseWriter http.ResponseWriter, request *http
 		handler.renderCheckoutError(responseWriter, request, http.StatusConflict, current, items, unavailableItem.Name+" is no longer available in the requested quantity. Update your cart before checking out.")
 		return
 	}
-	order, err := handler.orderStore.CreateFromCart(request.Context(), current.User.ID, items, discountCents, shippingDetails, checkoutAdminNotes, handler.keyring)
+	order, err := handler.orderStore.CreateFromCart(request.Context(), current.User.ID, items, shippingDetails, checkoutAdminNotes, handler.keyring)
 	if errors.Is(err, orders.ErrInsufficientInventory) {
 		currentItems, listErr := handler.cartStore.ListItems(request.Context(), current.User.ID)
 		if listErr != nil {
@@ -204,7 +203,7 @@ func (handler *Handler) parseCheckoutForm(responseWriter http.ResponseWriter, re
 		City:       strings.TrimSpace(fieldValues["shippingCity"]),
 		Region:     strings.TrimSpace(fieldValues["shippingRegion"]),
 		PostalCode: strings.TrimSpace(fieldValues["shippingPostalCode"]),
-	}, parseDiscount(request.PostForm.Get("discountCents")), true
+	}, 0, true
 }
 
 func (handler *Handler) renderPage(responseWriter http.ResponseWriter, statusCode int, current accounts.CurrentSession, items []cart.Item, errorMessage string) error {
@@ -255,9 +254,4 @@ func firstUnavailable(items []cart.Item) *cart.Item {
 		}
 	}
 	return nil
-}
-
-func parseDiscount(value string) int64 {
-	discount, _ := strconv.ParseInt(value, 10, 64)
-	return discount
 }
