@@ -9,6 +9,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -64,6 +65,39 @@ func cspNonce(next http.Handler) http.Handler {
 		request = request.WithContext(httpx.WithCSPNonce(request.Context(), nonce))
 		next.ServeHTTP(responseWriter, request)
 	})
+}
+
+func sourceValidation(appOrigin string, renderer *templates.Renderer) middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+			if request.Method != http.MethodPost {
+				next.ServeHTTP(responseWriter, request)
+				return
+			}
+			originHeader := request.Header.Get("Origin")
+			if len(originHeader) > 0 && originHeader != appOrigin {
+				httpx.RespondWithErrorPage(responseWriter, renderer, http.StatusForbidden, "untrusted source", "untrusted origin")
+				return
+			}
+
+			if originHeader == "" {
+				refererHeader := request.Header.Get("Referer")
+				referer, err := url.Parse(refererHeader)
+				if err != nil {
+					httpx.RespondWithErrorPage(responseWriter, renderer, http.StatusForbidden, "untrusted source", "untrusted source")
+					return
+				}
+
+				refererURL := referer.Scheme + "://" + referer.Host
+				if refererURL != appOrigin {
+					httpx.RespondWithErrorPage(responseWriter, renderer, http.StatusForbidden, "untrusted source", "untrusted origin")
+					return
+				}
+
+			}
+			next.ServeHTTP(responseWriter, request)
+		})
+	}
 }
 
 func recoverPanics(logger *logging.Logger, renderer *templates.Renderer) middleware {
