@@ -102,7 +102,10 @@ func sourceValidation(appOrigin string, renderer *templates.Renderer) middleware
 
 func contentSecurityPolicy(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		responseWriter.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'")
+		nonce := httpx.CSPNonce(request.Context())
+		responseWriter.Header().Set("Content-Security-Policy", fmt.Sprintf("default-src 'self'; script-src 'self' 'nonce-%s'; style-src 'self'; img-src 'self' data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'", nonce))
+		responseWriter.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		responseWriter.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		next.ServeHTTP(responseWriter, request)
 	})
 }
