@@ -25,6 +25,21 @@ type orderItemResponse struct {
 	PriceCents  int64  `json:"price_cents"`
 }
 
+type productResponse struct {
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	ImagePath   string `json:"image_path"`
+	PriceCents  int64  `json:"price_cents"`
+}
+
+type orderResponse struct {
+	ID         int64  `json:"id"`
+	Status     string `json:"status"`
+	TotalCents int64  `json:"total_cents"`
+	CreatedAt  string `json:"created_at"`
+}
+
 type Handler struct {
 	accountStore      *accounts.Store
 	orderStore        *orders.Store
@@ -51,7 +66,17 @@ func (handler *Handler) AccountOrders(responseWriter http.ResponseWriter, reques
 		handler.internalError(responseWriter, request, err)
 		return
 	}
-	httpx.RespondWithJSON(responseWriter, http.StatusOK, map[string]any{"orders": orders})
+
+	filteredOrders := make([]orderResponse, 0, len(orders))
+	for _, order := range orders {
+		filteredOrders = append(filteredOrders, orderResponse{
+			ID:         order.ID,
+			Status:     order.Status,
+			TotalCents: order.TotalCents,
+			CreatedAt:  order.CreatedAt,
+		})
+	}
+	httpx.RespondWithJSON(responseWriter, http.StatusOK, map[string]any{"orders": filteredOrders})
 }
 
 func (handler *Handler) Order(responseWriter http.ResponseWriter, request *http.Request) {
@@ -82,17 +107,32 @@ func (handler *Handler) Order(responseWriter http.ResponseWriter, request *http.
 	for _, item := range items {
 		itemResponses = append(itemResponses, orderItemResponse{ProductID: item.ProductID, ProductName: item.ProductName, Quantity: item.Quantity, PriceCents: item.PriceCents})
 	}
-	httpx.RespondWithJSON(responseWriter, http.StatusOK, map[string]any{"order": order, "items": itemResponses})
+	httpx.RespondWithJSON(responseWriter, http.StatusOK, map[string]any{"order": orderResponse{
+		ID:         order.ID,
+		Status:     order.Status,
+		TotalCents: order.TotalCents,
+		CreatedAt:  order.CreatedAt,
+	}, "items": itemResponses})
 }
 
 func (handler *Handler) Products(responseWriter http.ResponseWriter, request *http.Request) {
 	responseWriter.Header().Set("Access-Control-Allow-Origin", "*")
-	products, err := handler.productStore.ListAllProducts(request.Context())
+	products, err := handler.apiStore.queries.ListActiveProducts(request.Context(), handler.maxProductResults)
 	if err != nil {
 		handler.internalError(responseWriter, request, err)
 		return
 	}
-	httpx.RespondWithJSON(responseWriter, http.StatusOK, map[string]any{"products": products})
+	filteredProducts := make([]productResponse, 0, len(products))
+	for _, product := range products {
+		filteredProducts = append(filteredProducts, productResponse{
+			ID:          product.ID,
+			Name:        product.Name,
+			Description: product.Description,
+			ImagePath:   product.ImagePath,
+			PriceCents:  product.PriceCents,
+		})
+	}
+	httpx.RespondWithJSON(responseWriter, http.StatusOK, map[string]any{"products": filteredProducts})
 }
 
 func (handler *Handler) Options(responseWriter http.ResponseWriter, request *http.Request) {
